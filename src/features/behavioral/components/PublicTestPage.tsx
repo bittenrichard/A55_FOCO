@@ -2,7 +2,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { ADJECTIVES_STEP_1, ADJECTIVES_STEP_2 } from '../data/questions';
-import { Loader2, AlertCircle, CheckCircle, BrainCircuit } from 'lucide-react';
+import { Loader2, AlertCircle, CheckCircle, BrainCircuit, Calendar } from 'lucide-react';
 import ProgressBar from '../../../shared/components/Layout/ProgressBar/index';
 import { BehavioralTestResult } from '../types';
 import ProfileChart from './ProfileChart';
@@ -59,7 +59,11 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
     
     const fetchResult = useCallback(async () => {
         try {
-            const response = await fetch(`${API_BASE_URL}/api/behavioral-test/result/${testId}`);
+            // --- ALTERAÇÃO APLICADA AQUI PARA EVITAR CACHE ---
+            const cacheBuster = `?t=${new Date().getTime()}`;
+            const response = await fetch(`${API_BASE_URL}/api/behavioral-test/result/${testId}${cacheBuster}`);
+            // --- FIM DA ALTERAÇÃO ---
+
             if (response.ok) {
                 const { data } = await response.json();
                 if (data.status === 'Concluído') {
