@@ -43,7 +43,7 @@ const WHATSAPP_CANDIDATOS_TABLE_ID = '712';
 const AGENDAMENTOS_TABLE_ID = '713';
 const SALT_ROUNDS = 10;
 const TESTE_COMPORTAMENTAL_TABLE_ID = '727';
-const TESTE_COMPORTAMENTAL_WEBHOOK_URL = 'https://webhook.focoserv.com.br/webhook/testecomportamental';
+const TESTE_COMPORTAMENTAL_WEBHOOK_URL = process.env.TESTE_COMPORTAMENTAL_WEBHOOK_URL;
 
 interface BaserowJobPosting {
   id: number;
@@ -438,7 +438,7 @@ app.post('/api/upload-curriculums', upload.array('curriculumFiles'), async (req:
       newCandidateEntries.push(createdCandidate);
     }
 
-    const N8N_TRIAGEM_WEBHOOK_URL = 'https://webhook.focoserv.com.br/webhook/recrutamento';
+    const N8N_TRIAGEM_WEBHOOK_URL = process.env.N8N_FILE_UPLOAD_URL;
 
     const jobInfo = await baserowServer.getRow(VAGAS_TABLE_ID, parseInt(jobId as string));
     const userInfo = await baserowServer.getRow(USERS_TABLE_ID, parseInt(userId as string));
@@ -657,7 +657,7 @@ app.post('/api/behavioral-test/generate', async (req: Request, res: Response) =>
   }
 });
 
-// --- VERSÃO FINAL E ROBUSTA ---
+// --- ALTERAÇÃO APLICADA AQUI ---
 app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => {
     const { testId, responses } = req.body;
     if (!testId || !responses) {
@@ -665,38 +665,40 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
     }
 
     try {
-        // Passo 1: Salva apenas os dados essenciais, removendo a atualização de 'status'.
+        // Passo 1: Atualiza o registro no Baserow com as respostas e o novo status.
         const dataToPatch = {
             data_de_resposta: new Date().toISOString(),
             respostas: JSON.stringify(responses),
+            status: 'Processando', // <-- MUDANÇA PRINCIPAL AQUI
         };
         
         await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), dataToPatch);
 
-        // Passo 2: Monta o payload para o webhook.
+        // Passo 2: Monta o payload para o webhook do N8N.
         const webhookPayload = {
             testId: parseInt(testId),
             responses,
         };
 
-        // Passo 3: Dispara o webhook ("Fire and Forget").
-        fetch(TESTE_COMPORTAMENTAL_WEBHOOK_URL, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(webhookPayload),
-        }).catch(webhookError => {
-            console.error(`ERRO AO DISPARAR WEBHOOK para Teste ID: ${testId}:`, webhookError);
-        });
+        // Passo 3: Dispara o webhook para o N8N. O backend não espera pela resposta.
+        if (TESTE_COMPORTAMENTAL_WEBHOOK_URL) {
+            fetch(TESTE_COMPORTAMENTAL_WEBHOOK_URL, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(webhookPayload),
+            }).catch(webhookError => {
+                // Loga um erro se o webhook falhar, mas não impede a resposta ao usuário.
+                console.error(`ERRO AO DISPARAR WEBHOOK para Teste ID: ${testId}:`, webhookError);
+            });
+        } else {
+            console.warn(`Webhook de teste comportamental não configurado. O teste ${testId} não será processado.`);
+        }
 
-        // Passo 4: Retorna sucesso imediatamente para o usuário.
+        // Passo 4: Retorna sucesso imediatamente para o frontend.
         res.status(200).json({ success: true, message: 'Teste enviado para análise.' });
 
     } catch (error: any) {
-        // Este erro agora só deve acontecer se a escrita no Baserow falhar.
         console.error(`ERRO GRAVE ao salvar respostas do Teste ID ${testId}:`, error.message);
-        if (error.response && error.response.data) {
-            console.error("Detalhes da API (Baserow):", JSON.stringify(error.response.data, null, 2));
-        }
         res.status(500).json({ error: 'Erro ao salvar as respostas do teste.' });
     }
 });
@@ -708,8 +710,8 @@ app.get('/api/public/behavioral-test/:testId', async (req: Request, res: Respons
     }
     try {
         const result = await baserowServer.getRow(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId));
-        if (!result) {
-            return res.status(404).json({ error: 'Teste não encontrado.' });
+        if (!result || !result.candidato || result.candidato.length === 0) {
+            return res.status(404).json({ error: 'Teste não encontrado ou inválido.' });
         }
         res.json({ success: true, data: { candidateName: result.candidato[0]?.value } });
     } catch (error: any) {
