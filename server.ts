@@ -472,15 +472,14 @@ app.post('/api/upload-curriculums', upload.array('curriculumFiles'), async (req:
         candidatos: candidatosParaWebhook
       };
 
-      try {
-        await fetch(N8N_TRIAGEM_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload)
-        });
-      } catch (webhookError) {
+      // Dispara o webhook mas não espera a resposta (fire-and-forget)
+      fetch(N8N_TRIAGEM_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookPayload)
+      }).catch(webhookError => {
         console.error("Erro ao disparar o webhook para o n8n (triagem em lote):", webhookError);
-      }
+      });
     }
 
     res.json({ success: true, message: `${files.length} currículo(s) enviado(s) para análise!`, newCandidates: newCandidateEntries });
@@ -620,15 +619,13 @@ app.post('/api/google/calendar/create-event', async (req: Request, res: Response
           details: eventData.details, googleEventLink: response.data.htmlLink
         }
       };
-      try {
-        await fetch(process.env.N8N_SCHEDULE_WEBHOOK_URL, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(webhookPayload)
-        });
-      } catch (webhookError) {
+      fetch(process.env.N8N_SCHEDULE_WEBHOOK_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(webhookPayload)
+      }).catch(webhookError => {
         console.error("Erro ao disparar o webhook para o n8n:", webhookError);
-      }
+      });
     }
     res.json({ success: true, message: 'Evento criado com sucesso!', data: response.data });
   } catch (error: any) {

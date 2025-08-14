@@ -126,7 +126,7 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Falha ao enviar o teste.');
-            setStep(3); // Muda para o estado de "Aguardando resultados"
+            setStep(3); // Muda para o estado de "Aguardando resultados" para o polling começar
         } catch (err: any) {
             setError(err.message);
         } finally {
