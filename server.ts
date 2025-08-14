@@ -470,11 +470,13 @@ app.post('/api/upload-curriculums', upload.array('curriculumFiles'), async (req:
         throw new Error(`O N8N respondeu com um erro na triagem: ${n8nResponse.statusText}`);
       }
 
+      // O N8N retorna os candidatos atualizados, que repassamos para o frontend.
       const updatedCandidates = await n8nResponse.json();
-      res.json({ success: true, message: `${files.length} currículo(s) analisado(s) com sucesso!`, newCandidates: updatedCandidates });
+      res.json({ success: true, message: `${files.length} currículo(s) analisado(s) com sucesso!`, newCandidates: updatedCandidates.candidates || [] });
 
     } else {
-      res.json({ success: true, message: `${files.length} currículo(s) enviado(s) para análise!`, newCandidates: newCandidateEntries });
+      // Caso não haja webhook, retorna os candidatos recém-criados sem análise
+      res.json({ success: true, message: `${files.length} currículo(s) enviado(s), mas não foram para análise.`, newCandidates: newCandidateEntries });
     }
 
   } catch (error: any) {
