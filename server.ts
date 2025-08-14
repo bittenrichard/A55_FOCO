@@ -44,6 +44,8 @@ const AGENDAMENTOS_TABLE_ID = '713';
 const SALT_ROUNDS = 10;
 const TESTE_COMPORTAMENTAL_TABLE_ID = '727';
 const TESTE_COMPORTAMENTAL_WEBHOOK_URL = process.env.TESTE_COMPORTAMENTAL_WEBHOOK_URL;
+const N8N_TRIAGEM_WEBHOOK_URL = process.env.N8N_FILE_UPLOAD_URL;
+
 
 interface BaserowJobPosting {
   id: number;
@@ -438,8 +440,6 @@ app.post('/api/upload-curriculums', upload.array('curriculumFiles'), async (req:
       newCandidateEntries.push(createdCandidate);
     }
 
-    const N8N_TRIAGEM_WEBHOOK_URL = process.env.N8N_FILE_UPLOAD_URL;
-
     const jobInfo = await baserowServer.getRow(VAGAS_TABLE_ID, parseInt(jobId as string));
     const userInfo = await baserowServer.getRow(USERS_TABLE_ID, parseInt(userId as string));
 
@@ -455,20 +455,8 @@ app.post('/api/upload-curriculums', upload.array('curriculumFiles'), async (req:
 
       const webhookPayload = {
         tipo: 'triagem_curriculo_lote',
-        recrutador: {
-          id: userInfo.id,
-          nome: userInfo.nome,
-          email: userInfo.Email,
-          empresa: userInfo.empresa
-        },
-        vaga: {
-          id: jobInfo.id,
-          titulo: jobInfo.titulo,
-          descricao: jobInfo.descricao,
-          endereco: jobInfo.Endereco,
-          requisitos_obrigatorios: jobInfo.requisitos_obrigatorios,
-          requisitos_desejaveis: jobInfo.requisitos_desejaveis
-        },
+        recrutador: { id: userInfo.id, nome: userInfo.nome, email: userInfo.Email, empresa: userInfo.empresa },
+        vaga: { id: jobInfo.id, titulo: jobInfo.titulo, descricao: jobInfo.descricao, endereco: jobInfo.Endereco, requisitos_obrigatorios: jobInfo.requisitos_obrigatorios, requisitos_desejaveis: jobInfo.requisitos_desejaveis },
         candidatos: candidatosParaWebhook
       };
 
@@ -661,36 +649,44 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
     }
 
     try {
-        const dataToPatch = {
+        await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), {
             data_de_resposta: new Date().toISOString(),
             respostas: JSON.stringify(responses),
             status: 'Processando',
-        };
+        });
         
-        await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), dataToPatch);
+        console.log(`[Teste ${testId}] Disparando webhook para N8N e aguardando resposta...`);
 
-        const webhookPayload = {
-            testId: parseInt(testId),
-            responses,
-        };
-
-        if (TESTE_COMPORTAMENTAL_WEBHOOK_URL) {
-            fetch(TESTE_COMPORTAMENTAL_WEBHOOK_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(webhookPayload),
-            }).catch(webhookError => {
-                console.error(`ERRO AO DISPARAR WEBHOOK para Teste ID: ${testId}:`, webhookError);
-            });
-        } else {
-            console.warn(`Webhook de teste comportamental não configurado. O teste ${testId} não será processado.`);
+        if (!TESTE_COMPORTAMENTAL_WEBHOOK_URL) {
+          throw new Error('URL do webhook de teste comportamental não configurada no servidor.');
         }
 
-        res.status(200).json({ success: true, message: 'Teste enviado para análise.' });
+        const n8nResponse = await fetch(TESTE_COMPORTAMENTAL_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ testId: parseInt(testId), responses }),
+        });
+
+        if (!n8nResponse.ok) {
+            const errorText = await n8nResponse.text();
+            throw new Error(`O N8N respondeu com um erro: ${n8nResponse.statusText} - ${errorText}`);
+        }
+
+        const finalResultFromN8N = await n8nResponse.json();
+        console.log(`[Teste ${testId}] Resposta recebida do N8N.`);
+
+        const dataToUpdate = {
+            ...finalResultFromN8N,
+            status: 'Concluído'
+        };
+        const updatedTest = await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), dataToUpdate);
+        
+        res.status(200).json({ success: true, data: updatedTest });
 
     } catch (error: any) {
-        console.error(`ERRO GRAVE ao salvar respostas do Teste ID ${testId}:`, error.message);
-        res.status(500).json({ error: 'Erro ao salvar as respostas do teste.' });
+        console.error(`[Teste ${testId}] Erro no fluxo síncrono do teste:`, error.message);
+        await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), { status: 'Erro' }).catch(err => console.error("Falha ao atualizar status para Erro:", err));
+        res.status(500).json({ error: error.message || 'Erro ao processar o teste.' });
     }
 });
 
