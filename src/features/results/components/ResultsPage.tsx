@@ -24,10 +24,9 @@ interface SortConfig {
 
 interface ResultsPageProps {
   selectedJob: JobPosting | null;
-  onDataSynced: () => void;
 }
 
-const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob, onDataSynced }) => {
+const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob }) => {
   const { profile } = useAuth();
   const { isGoogleConnected } = useGoogleAuth();
   const { candidates, updateCandidateStatusInStore, fetchAllData } = useDataStore();
@@ -93,7 +92,6 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob, onDataSynced }) 
     }
   }, [profile, fetchAllData, updateCandidateStatusInStore]);
 
-  // --- CORREÇÃO APLICADA AQUI ---
   const handleFilesSelected = async (files: FileList): Promise<void> => {
     if (!selectedJob || !profile) {
       setUploadError('Vaga ou perfil de usuário não selecionados.');
@@ -121,10 +119,6 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob, onDataSynced }) 
         throw new Error(data.message || 'Ocorreu um erro durante o upload.');
       }
       
-      // AQUI ESTÁ A CORREÇÃO PRINCIPAL:
-      // Em vez de chamar uma função que não existe, nós simplesmente
-      // pedimos para o nosso sistema buscar todos os dados novamente.
-      // Isso irá incluir os novos candidatos já com os scores e resumos.
       await fetchAllData(profile);
       setUploadSuccessMessage(data.message);
 
@@ -153,7 +147,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob, onDataSynced }) 
       const data = await response.json();
       if (!response.ok) throw new Error(data.message);
       alert("Entrevista agendada com sucesso!");
-      onDataSynced();
+      await fetchAllData(profile);
 
     } catch (error: any) {
       alert(`Falha ao agendar: ${error.message}`);

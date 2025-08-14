@@ -467,15 +467,14 @@ app.post('/api/upload-curriculums', upload.array('curriculumFiles'), async (req:
       });
 
       if (!n8nResponse.ok) {
-        throw new Error(`O N8N respondeu com um erro na triagem: ${n8nResponse.statusText}`);
+        const errorText = await n8nResponse.text();
+        throw new Error(`O N8N respondeu com um erro na triagem: ${n8nResponse.statusText} - ${errorText}`);
       }
 
-      // O N8N retorna os candidatos atualizados, que repassamos para o frontend.
-      const updatedCandidates = await n8nResponse.json();
-      res.json({ success: true, message: `${files.length} currículo(s) analisado(s) com sucesso!`, newCandidates: updatedCandidates.candidates || [] });
+      const updatedCandidatesResponse = await n8nResponse.json();
+      res.json({ success: true, message: `${files.length} currículo(s) analisado(s) com sucesso!`, newCandidates: updatedCandidatesResponse.candidates || [] });
 
     } else {
-      // Caso não haja webhook, retorna os candidatos recém-criados sem análise
       res.json({ success: true, message: `${files.length} currículo(s) enviado(s), mas não foram para análise.`, newCandidates: newCandidateEntries });
     }
 
@@ -679,13 +678,29 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
             throw new Error(`O N8N respondeu com um erro: ${n8nResponse.statusText} - ${errorText}`);
         }
 
-        const finalResultFromN8N = await n8nResponse.json();
-        console.log(`[Teste ${testId}] Resposta recebida do N8N.`);
+        const n8nResultArray = await n8nResponse.json();
+        console.log(`[Teste ${testId}] Resposta recebida do N8N:`, JSON.stringify(n8nResultArray, null, 2));
+
+        if (!Array.isArray(n8nResultArray) || n8nResultArray.length === 0) {
+            throw new Error('A resposta do N8N não é um array válido ou está vazia.');
+        }
+
+        const perfilAnalisado = n8nResultArray[0]?.perfil_analisado;
+        if (!perfilAnalisado || !perfilAnalisado.pontuacoes) {
+            throw new Error('A resposta do N8N não contém o objeto "perfil_analisado" ou "pontuacoes" esperado.');
+        }
 
         const dataToUpdate = {
-            ...finalResultFromN8N,
+            resumo_perfil: perfilAnalisado.resumo,
+            habilidades_comuns: perfilAnalisado.habilidades ? perfilAnalisado.habilidades.join(', ') : null,
+            indicadores: perfilAnalisado.indicadores,
+            perfil_executor: perfilAnalisado.pontuacoes.executor,
+            perfil_comunicador: perfilAnalisado.pontuacoes.comunicador,
+            perfil_planejador: perfilAnalisado.pontuacoes.planejador,
+            perfil_analista: perfilAnalisado.pontuacoes.analista,
             status: 'Concluído'
         };
+        
         const updatedTest = await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), dataToUpdate);
         
         res.status(200).json({ success: true, data: updatedTest });

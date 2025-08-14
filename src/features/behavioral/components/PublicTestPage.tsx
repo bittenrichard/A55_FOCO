@@ -25,7 +25,6 @@ const AdjectiveButton: React.FC<{
 );
 
 const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
-    // ESTADOS SIMPLIFICADOS: Removemos a lógica de polling
     const [step, setStep] = useState(0); // 0: Loading, 1: Step 1, 2: Step 2, 3: Submitting, 4: Showing results
     const [step1Answers, setStep1Answers] = useState<string[]>([]);
     const [step2Answers, setStep2Answers] = useState<string[]>([]);
@@ -73,13 +72,12 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
         setStep(2);
     };
 
-    // FUNÇÃO DE SUBMISSÃO ALTERADA PARA AGUARDAR A RESPOSTA COMPLETA
     const handleSubmit = async () => {
         if (step2Answers.length < SELECTIONS_MINIMUM) {
             alert(`Você deve selecionar no mínimo ${SELECTIONS_MINIMUM} adjetivos no Passo 2.`);
             return;
         }
-        setStep(3); // Mostra a tela de "Analisando..."
+        setStep(3);
         setError(null);
         try {
             const response = await fetch(`${API_BASE_URL}/api/behavioral-test/submit`, {
@@ -94,14 +92,13 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
                 throw new Error(result.error || 'Falha ao processar o teste. Tente novamente mais tarde.');
             }
             
-            // A resposta do backend já contém o resultado final e completo
             setFinalResult(result.data);
-            setStep(4); // Vai direto para a tela de resultados
+            setStep(4);
 
         } catch (err: any) {
             console.error(err);
             setError(err.message);
-            setStep(-1); // Vai para a tela de erro
+            setStep(-1);
         }
     };
 
@@ -137,7 +134,7 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
                         </div>
                     </>
                 );
-            case 3: // Estado de "Submetendo e Processando"
+            case 3:
                 return (
                     <div className="text-center py-20">
                         <Loader2 className="mx-auto h-12 w-12 text-indigo-600 animate-spin" />
@@ -181,7 +178,7 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
                         </div>
                     </div>
                 );
-            case -1: // Error
+            case -1:
             default:
                 return <div className="min-h-[50vh] flex items-center justify-center bg-red-50 p-8 rounded-lg"><AlertCircle className="text-red-500 mr-4" size={48} /><p className="text-red-700 text-xl">{error}</p></div>;
         }
