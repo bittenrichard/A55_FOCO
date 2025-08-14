@@ -678,17 +678,28 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
             throw new Error(`O N8N respondeu com um erro: ${n8nResponse.statusText} - ${errorText}`);
         }
 
-        const n8nResultArray = await n8nResponse.json();
-        console.log(`[Teste ${testId}] Resposta recebida do N8N:`, JSON.stringify(n8nResultArray, null, 2));
+        const n8nResultData = await n8nResponse.json();
+        console.log(`[Teste ${testId}] Resposta recebida do N8N:`, JSON.stringify(n8nResultData, null, 2));
 
-        if (!Array.isArray(n8nResultArray) || n8nResultArray.length === 0) {
-            throw new Error('A resposta do N8N não é um array válido ou está vazia.');
+        // --- INÍCIO DA CORREÇÃO ---
+        // Esta lógica agora trata tanto a resposta como um objeto único quanto como um array com um objeto.
+        let resultObject;
+        if (Array.isArray(n8nResultData) && n8nResultData.length > 0) {
+            // Se for um array, pegamos o primeiro elemento como antes.
+            resultObject = n8nResultData[0];
+        } else if (typeof n8nResultData === 'object' && n8nResultData !== null && !Array.isArray(n8nResultData)) {
+            // Se for um objeto (e não um array), usamos ele diretamente.
+            resultObject = n8nResultData;
+        } else {
+            // Se não for nem um array válido nem um objeto, lançamos o erro.
+            throw new Error('A resposta do N8N não é um objeto ou array válido, ou está vazia.');
         }
 
-        const perfilAnalisado = n8nResultArray[0]?.perfil_analisado;
+        const perfilAnalisado = resultObject?.perfil_analisado;
         if (!perfilAnalisado || !perfilAnalisado.pontuacoes) {
             throw new Error('A resposta do N8N não contém o objeto "perfil_analisado" ou "pontuacoes" esperado.');
         }
+        // --- FIM DA CORREÇÃO ---
 
         const dataToUpdate = {
             resumo_perfil: perfilAnalisado.resumo,
