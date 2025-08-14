@@ -648,7 +648,6 @@ app.post('/api/behavioral-test/generate', async (req: Request, res: Response) =>
   }
 });
 
-// --- VERSÃO FINAL E CORRIGIDA do Teste Comportamental ---
 app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => {
     const { testId, responses } = req.body;
     if (!testId || !responses) {
@@ -679,11 +678,9 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
             throw new Error(`O N8N respondeu com um erro: ${n8nResponse.statusText} - ${errorText}`);
         }
 
-        // --- INÍCIO DA TRADUÇÃO DOS DADOS ---
         const n8nResultArray = await n8nResponse.json();
         console.log(`[Teste ${testId}] Resposta recebida do N8N:`, JSON.stringify(n8nResultArray, null, 2));
-        
-        // Verificamos se a resposta é um array e se contém dados
+
         if (!Array.isArray(n8nResultArray) || n8nResultArray.length === 0) {
             throw new Error('A resposta do N8N não é um array válido ou está vazia.');
         }
@@ -692,8 +689,7 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
         if (!perfilAnalisado || !perfilAnalisado.pontuacoes) {
             throw new Error('A resposta do N8N não contém o objeto "perfil_analisado" ou "pontuacoes" esperado.');
         }
-        
-        // Criamos o objeto "traduzido" para o nosso banco de dados
+
         const dataToUpdate = {
             resumo_perfil: perfilAnalisado.resumo,
             habilidades_comuns: perfilAnalisado.habilidades ? perfilAnalisado.habilidades.join(', ') : null,
@@ -704,7 +700,6 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
             perfil_analista: perfilAnalisado.pontuacoes.analista,
             status: 'Concluído'
         };
-        // --- FIM DA TRADUÇÃO DOS DADOS ---
         
         const updatedTest = await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), dataToUpdate);
         
