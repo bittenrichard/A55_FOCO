@@ -3,7 +3,7 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'development'}` });
 
-import express, { Request, Response, NextFunction } from 'express';
+import express, { Request, Response } from 'express';
 import cors from 'cors';
 import { google } from 'googleapis';
 import { baserowServer } from './src/shared/services/baserowServerClient.js';
@@ -460,17 +460,22 @@ app.post('/api/upload-curriculums', upload.array('curriculumFiles'), async (req:
         candidatos: candidatosParaWebhook
       };
 
-      // Dispara o webhook mas não espera a resposta (fire-and-forget)
-      fetch(N8N_TRIAGEM_WEBHOOK_URL, {
+      const n8nResponse = await fetch(N8N_TRIAGEM_WEBHOOK_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(webhookPayload)
-      }).catch(webhookError => {
-        console.error("Erro ao disparar o webhook para o n8n (triagem em lote):", webhookError);
       });
-    }
 
-    res.json({ success: true, message: `${files.length} currículo(s) enviado(s) para análise!`, newCandidates: newCandidateEntries });
+      if (!n8nResponse.ok) {
+        throw new Error(`O N8N respondeu com um erro na triagem: ${n8nResponse.statusText}`);
+      }
+
+      const updatedCandidates = await n8nResponse.json();
+      res.json({ success: true, message: `${files.length} currículo(s) analisado(s) com sucesso!`, newCandidates: updatedCandidates });
+
+    } else {
+      res.json({ success: true, message: `${files.length} currículo(s) enviado(s) para análise!`, newCandidates: newCandidateEntries });
+    }
 
   } catch (error: any) {
     console.error('Erro no upload de currículos (backend):', error);
@@ -697,8 +702,8 @@ app.get('/api/public/behavioral-test/:testId', async (req: Request, res: Respons
     }
     try {
         const result = await baserowServer.getRow(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId));
-        if (!result || !result.candidato || result.candidato.length === 0) {
-            return res.status(404).json({ error: 'Teste não encontrado ou inválido.' });
+        if (!result) {
+            return res.status(404).json({ error: 'Teste não encontrado.' });
         }
         res.json({ success: true, data: { candidateName: result.candidato[0]?.value } });
     } catch (error: any) {
