@@ -9,7 +9,10 @@ import ProfileChart from './ProfileChart';
 import { format } from 'date-fns';
 import { ptBR } from 'date-fns/locale';
 
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL;
+// --- CORREÇÃO APLICADA AQUI ---
+// Garante que a API_BASE_URL seja uma string vazia se a variável de ambiente não for definida.
+// Isso faz com que a chamada fetch('/api/...') funcione corretamente em produção.
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || '';
 
 interface PublicTestPageProps {
   testId: string;
@@ -25,7 +28,7 @@ const AdjectiveButton: React.FC<{
 );
 
 const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
-    const [step, setStep] = useState(0); // 0: Loading, 1: Step 1, 2: Step 2, 3: Waiting for results, 4: Showing results
+    const [step, setStep] = useState(0);
     const [step1Answers, setStep1Answers] = useState<string[]>([]);
     const [step2Answers, setStep2Answers] = useState<string[]>([]);
     const [isSubmitting, setIsSubmitting] = useState(false);
@@ -46,10 +49,10 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
             if (!response.ok) throw new Error('Teste inválido, já respondido ou não encontrado.');
             const { data } = await response.json();
             setCandidateName(data.candidateName);
-            setStep(1); // Move to step 1 after loading
+            setStep(1);
         } catch (err: any) {
             setError(err.message);
-            setStep(-1); // Error state
+            setStep(-1);
         }
     }, [testId]);
     
@@ -59,39 +62,38 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
     
     const fetchResult = useCallback(async () => {
         try {
-            // --- ALTERAÇÃO APLICADA AQUI PARA EVITAR CACHE ---
+            // --- CORREÇÃO APLICADA AQUI PARA GARANTIR QUE O CACHE SEJA IGNORADO ---
             const cacheBuster = `?t=${new Date().getTime()}`;
             const response = await fetch(`${API_BASE_URL}/api/behavioral-test/result/${testId}${cacheBuster}`);
-            // --- FIM DA ALTERAÇÃO ---
-
+            
             if (response.ok) {
                 const { data } = await response.json();
                 if (data.status === 'Concluído') {
                     setFinalResult(data);
-                    setStep(4); // Move to results view
+                    setStep(4);
                     return true;
                 } else if (data.status === 'Erro') {
                     setError('Ocorreu um erro ao processar seu teste. O recrutador foi notificado.');
                     setStep(-1);
-                    return true; // Stop polling
+                    return true;
                 }
             }
         } catch (err) {
             setError('Não foi possível conectar ao servidor para buscar o resultado.');
             setStep(-1);
-            return true; // Stop polling on network error
+            return true;
         }
         return false;
     }, [testId]);
 
     useEffect(() => {
-        if (step === 3) { // Polling starts when step is 3
+        if (step === 3) {
             const intervalId = setInterval(async () => {
                 const isFinished = await fetchResult();
                 if (isFinished) {
                     clearInterval(intervalId);
                 }
-            }, 5000); // Poll every 5 seconds
+            }, 5000);
 
             return () => clearInterval(intervalId);
         }
@@ -128,7 +130,7 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
             });
             const data = await response.json();
             if (!response.ok) throw new Error(data.error || 'Falha ao enviar o teste.');
-            setStep(3); // Move to waiting for results
+            setStep(3);
         } catch (err: any) {
             setError(err.message);
         } finally {

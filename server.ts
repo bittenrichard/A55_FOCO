@@ -657,7 +657,6 @@ app.post('/api/behavioral-test/generate', async (req: Request, res: Response) =>
   }
 });
 
-// --- ALTERAÇÃO APLICADA AQUI ---
 app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => {
     const { testId, responses } = req.body;
     if (!testId || !responses) {
@@ -665,36 +664,31 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
     }
 
     try {
-        // Passo 1: Atualiza o registro no Baserow com as respostas e o novo status.
         const dataToPatch = {
             data_de_resposta: new Date().toISOString(),
             respostas: JSON.stringify(responses),
-            status: 'Processando', // <-- MUDANÇA PRINCIPAL AQUI
+            status: 'Processando',
         };
         
         await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), dataToPatch);
 
-        // Passo 2: Monta o payload para o webhook do N8N.
         const webhookPayload = {
             testId: parseInt(testId),
             responses,
         };
 
-        // Passo 3: Dispara o webhook para o N8N. O backend não espera pela resposta.
         if (TESTE_COMPORTAMENTAL_WEBHOOK_URL) {
             fetch(TESTE_COMPORTAMENTAL_WEBHOOK_URL, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(webhookPayload),
             }).catch(webhookError => {
-                // Loga um erro se o webhook falhar, mas não impede a resposta ao usuário.
                 console.error(`ERRO AO DISPARAR WEBHOOK para Teste ID: ${testId}:`, webhookError);
             });
         } else {
             console.warn(`Webhook de teste comportamental não configurado. O teste ${testId} não será processado.`);
         }
 
-        // Passo 4: Retorna sucesso imediatamente para o frontend.
         res.status(200).json({ success: true, message: 'Teste enviado para análise.' });
 
     } catch (error: any) {
@@ -733,6 +727,7 @@ app.get('/api/behavioral-test/results/recruiter/:recruiterId', async (req: Reque
   }
 });
 
+// --- ALTERAÇÃO APLICADA AQUI ---
 app.get('/api/behavioral-test/result/:testId', async (req: Request, res: Response) => {
     const { testId } = req.params;
     if (!testId) {
@@ -743,12 +738,19 @@ app.get('/api/behavioral-test/result/:testId', async (req: Request, res: Respons
         if (!result) {
             return res.status(404).json({ error: 'Resultado do teste não encontrado.' });
         }
+        
+        // Adiciona cabeçalhos para desativar o cache do navegador para esta resposta
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // HTTP 1.1.
+        res.setHeader('Pragma', 'no-cache'); // HTTP 1.0.
+        res.setHeader('Expires', '0'); // Proxies.
+
         res.json({ success: true, data: result });
     } catch (error: any) {
         console.error(`Erro ao buscar resultado do teste ${testId} (backend):`, error);
         res.status(500).json({ error: 'Não foi possível buscar o resultado do teste.' });
     }
 });
+
 
 app.listen(port, () => {
   console.log(`Backend rodando em http://localhost:${port}`);
