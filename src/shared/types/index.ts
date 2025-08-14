@@ -1,7 +1,6 @@
 // Caminho: src/shared/types/index.ts
-// CÓDIGO COMPLETO DO ARQUIVO PARA SUBSTITUIÇÃO
+// SUBSTITUA O CONTEÚDO INTEIRO DESTE ARQUIVO
 
-// Chave da página para navegação
 export type PageKey = 
   'login' | 
   'signup' | 
@@ -15,7 +14,6 @@ export type PageKey =
   'behavioral-test' |
   'behavioral-result';
 
-// Representa um Candidato como vem da API do Baserow
 export interface Candidate {
   id: number;
   order: string;
@@ -28,11 +26,26 @@ export interface Candidate {
   vaga: { id: number; value: string }[] | null;
   usuario: { id: number; value: string }[] | null;
   curriculo?: { url: string; name: string }[] | null;
-  
   cidade?: string;
   bairro?: string;
   idade?: number;
   sexo?: string;
   escolaridade?: string;
   status?: { id: number; value: 'Triagem' | 'Entrevista' | 'Aprovado' | 'Reprovado' } | null;
+  behavioral_test_status?: 'Concluído' | 'Pendente' | 'Processando' | 'Erro' | null;
+  resumo_perfil?: string | null;
+  perfil_executor?: number | null;
+  perfil_comunicador?: number | null;
+  perfil_planejador?: number | null;
+  perfil_analista?: number | null;
+}
+
+export interface Job {
+    id: number;
+    order: string;
+    titulo: string;
+    descricao?: string;
+    cidade?: string;
+    modalidade?: { id: number; value: string };
+    status?: { id: number; value: string };
 }

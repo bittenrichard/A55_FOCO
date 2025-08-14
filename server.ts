@@ -1,4 +1,5 @@
-// Local: server.ts
+// Caminho do arquivo: server.ts
+// SUBSTITUA O CONTEÚDO INTEIRO DESTE ARQUIVO
 
 import dotenv from 'dotenv';
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'development'}` });
@@ -355,6 +356,17 @@ app.get('/api/data/all/:userId', async (req: Request, res: Response) => {
     const userJobIds = new Set(userJobs.map(job => job.id));
     const jobsMapByTitle = new Map<string, BaserowJobPosting>(userJobs.map((job: BaserowJobPosting) => [job.titulo.toLowerCase().trim(), job]));
     const jobsMapById = new Map<number, BaserowJobPosting>(userJobs.map((job: BaserowJobPosting) => [job.id, job]));
+    
+    const behavioralTestsResult = await baserowServer.get(TESTE_COMPORTAMENTAL_TABLE_ID, `?filter__recrutador__link_row_has=${userId}`);
+    const allBehavioralTests = behavioralTestsResult.results || [];
+    
+    const behavioralTestMap = new Map();
+    allBehavioralTests.forEach(test => {
+      if (test.candidato && test.candidato.length > 0) {
+        const candidateId = test.candidato[0].id;
+        behavioralTestMap.set(candidateId, test);
+      }
+    });
 
     const regularCandidatesResult = await baserowServer.get(CANDIDATOS_TABLE_ID, '');
     const whatsappCandidatesResult = await baserowServer.get(WHATSAPP_CANDIDATOS_TABLE_ID, '');
@@ -383,7 +395,6 @@ app.get('/api/data/all/:userId', async (req: Request, res: Response) => {
     });
 
     const syncedCandidates = userCandidatesRaw.map((candidate: BaserowCandidate) => {
-      const newCandidate = { ...candidate };
       let vagaLink: { id: number; value: string }[] | null = null;
 
       if (candidate.vaga && typeof candidate.vaga === 'string') {
@@ -398,7 +409,20 @@ app.get('/api/data/all/:userId', async (req: Request, res: Response) => {
         }
       }
 
-      return { ...newCandidate, vaga: vagaLink };
+      const behavioralTest = behavioralTestMap.get(candidate.id);
+      
+      const enrichedCandidate = {
+        ...candidate,
+        vaga: vagaLink,
+        behavioral_test_status: behavioralTest ? behavioralTest.status : null,
+        resumo_perfil: behavioralTest ? behavioralTest.resumo_perfil : null,
+        perfil_executor: behavioralTest ? behavioralTest.perfil_executor : null,
+        perfil_comunicador: behavioralTest ? behavioralTest.perfil_comunicador : null,
+        perfil_planejador: behavioralTest ? behavioralTest.perfil_planejador : null,
+        perfil_analista: behavioralTest ? behavioralTest.perfil_analista : null,
+      };
+
+      return enrichedCandidate;
     });
 
     res.json({ jobs: userJobs, candidates: syncedCandidates });
@@ -680,18 +704,13 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
 
         const n8nResultData = await n8nResponse.json();
         console.log(`[Teste ${testId}] Resposta recebida do N8N:`, JSON.stringify(n8nResultData, null, 2));
-
-        // --- INÍCIO DA CORREÇÃO ---
-        // Esta lógica agora trata tanto a resposta como um objeto único quanto como um array com um objeto.
+        
         let resultObject;
         if (Array.isArray(n8nResultData) && n8nResultData.length > 0) {
-            // Se for um array, pegamos o primeiro elemento como antes.
             resultObject = n8nResultData[0];
         } else if (typeof n8nResultData === 'object' && n8nResultData !== null && !Array.isArray(n8nResultData)) {
-            // Se for um objeto (e não um array), usamos ele diretamente.
             resultObject = n8nResultData;
         } else {
-            // Se não for nem um array válido nem um objeto, lançamos o erro.
             throw new Error('A resposta do N8N não é um objeto ou array válido, ou está vazia.');
         }
 
@@ -699,7 +718,6 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
         if (!perfilAnalisado || !perfilAnalisado.pontuacoes) {
             throw new Error('A resposta do N8N não contém o objeto "perfil_analisado" ou "pontuacoes" esperado.');
         }
-        // --- FIM DA CORREÇÃO ---
 
         const dataToUpdate = {
             resumo_perfil: perfilAnalisado.resumo,
