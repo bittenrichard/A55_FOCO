@@ -30,7 +30,7 @@ interface ResultsPageProps {
 const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob, onDataSynced }) => {
   const { profile } = useAuth();
   const { isGoogleConnected } = useGoogleAuth();
-  const { candidates, updateCandidateStatusInStore, fetchAllData, addCandidates } = useDataStore();
+  const { candidates, updateCandidateStatusInStore, fetchAllData } = useDataStore();
   
   const [viewMode, setViewMode] = useState<ViewMode>('kanban');
   const [isProcessing, setIsProcessing] = useState(false);
@@ -93,6 +93,7 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob, onDataSynced }) 
     }
   }, [profile, fetchAllData, updateCandidateStatusInStore]);
 
+  // --- CORREÇÃO APLICADA AQUI ---
   const handleFilesSelected = async (files: FileList): Promise<void> => {
     if (!selectedJob || !profile) {
       setUploadError('Vaga ou perfil de usuário não selecionados.');
@@ -120,7 +121,11 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob, onDataSynced }) 
         throw new Error(data.message || 'Ocorreu um erro durante o upload.');
       }
       
-      addCandidates(data.newCandidates);
+      // AQUI ESTÁ A CORREÇÃO PRINCIPAL:
+      // Em vez de chamar uma função que não existe, nós simplesmente
+      // pedimos para o nosso sistema buscar todos os dados novamente.
+      // Isso irá incluir os novos candidatos já com os scores e resumos.
+      await fetchAllData(profile);
       setUploadSuccessMessage(data.message);
 
     } catch (error: any) {
@@ -128,7 +133,6 @@ const ResultsPage: React.FC<ResultsPageProps> = ({ selectedJob, onDataSynced }) 
       console.error("Erro na requisição de upload:", error);
     } finally { 
       setIsProcessing(false); 
-      // Não fechamos o modal aqui, o usuário o fará
     }
   };
   
