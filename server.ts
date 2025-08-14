@@ -414,7 +414,10 @@ app.get('/api/data/all/:userId', async (req: Request, res: Response) => {
       const enrichedCandidate = {
         ...candidate,
         vaga: vagaLink,
-        behavioral_test_status: behavioralTest ? behavioralTest.status : null,
+        // --- INÍCIO DA CORREÇÃO ---
+        // Acessamos a propriedade 'value' do objeto de status para enviar apenas o texto.
+        behavioral_test_status: behavioralTest && behavioralTest.status ? behavioralTest.status.value : null,
+        // --- FIM DA CORREÇÃO ---
         resumo_perfil: behavioralTest ? behavioralTest.resumo_perfil : null,
         perfil_executor: behavioralTest ? behavioralTest.perfil_executor : null,
         perfil_comunicador: behavioralTest ? behavioralTest.perfil_comunicador : null,
