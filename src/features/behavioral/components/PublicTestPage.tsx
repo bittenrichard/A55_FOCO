@@ -25,9 +25,10 @@ const AdjectiveButton: React.FC<{
 );
 
 const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
-    const [step, setStep] = useState(0); 
+    const [step, setStep] = useState(0); // 0: Loading, 1: Step 1, 2: Step 2, 3: Waiting for results, 4: Showing results
     const [step1Answers, setStep1Answers] = useState<string[]>([]);
     const [step2Answers, setStep2Answers] = useState<string[]>([]);
+    const [isSubmitting, setIsSubmitting] = useState(false);
     const [error, setError] = useState<string | null>(null);
     const [candidateName, setCandidateName] = useState<string>('');
     const [finalResult, setFinalResult] = useState<BehavioralTestResult | null>(null);
@@ -55,6 +56,44 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
     useEffect(() => {
         fetchTestData();
     }, [fetchTestData]);
+    
+    const fetchResult = useCallback(async () => {
+        try {
+            const cacheBuster = `?t=${new Date().getTime()}`;
+            const response = await fetch(`${API_BASE_URL}/api/behavioral-test/result/${testId}${cacheBuster}`);
+            
+            if (response.ok) {
+                const { data } = await response.json();
+                if (data.status === 'Concluído') {
+                    setFinalResult(data);
+                    setStep(4);
+                    return true;
+                } else if (data.status === 'Erro') {
+                    setError('Ocorreu um erro ao processar seu teste. O recrutador foi notificado.');
+                    setStep(-1);
+                    return true;
+                }
+            }
+        } catch (err) {
+            setError('Não foi possível conectar ao servidor para buscar o resultado.');
+            setStep(-1);
+            return true;
+        }
+        return false;
+    }, [testId]);
+
+    useEffect(() => {
+        if (step === 3) {
+            const intervalId = setInterval(async () => {
+                const isFinished = await fetchResult();
+                if (isFinished) {
+                    clearInterval(intervalId);
+                }
+            }, 5000); // Verifica a cada 5 segundos
+
+            return () => clearInterval(intervalId);
+        }
+    }, [step, fetchResult]);
 
     const currentAnswers = step === 1 ? step1Answers : step2Answers;
     const setAnswers = step === 1 ? setStep1Answers : setStep2Answers;
@@ -77,7 +116,7 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
             alert(`Você deve selecionar no mínimo ${SELECTIONS_MINIMUM} adjetivos no Passo 2.`);
             return;
         }
-        setStep(3); // Mostra a tela de "Analisando..."
+        setIsSubmitting(true);
         setError(null);
         try {
             const response = await fetch(`${API_BASE_URL}/api/behavioral-test/submit`, {
@@ -85,17 +124,13 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ testId, responses: { step1: step1Answers, step2: step2Answers } }),
             });
-            const result = await response.json();
-            if (!response.ok || !result.success) {
-                throw new Error(result.error || 'Falha ao processar o teste. Tente novamente mais tarde.');
-            }
-            // A resposta do backend já contém o resultado final e completo
-            setFinalResult(result.data);
-            setStep(4); // Vai direto para a tela de resultados
+            const data = await response.json();
+            if (!response.ok) throw new Error(data.error || 'Falha ao enviar o teste.');
+            setStep(3); // Muda para o estado de "Aguardando resultados"
         } catch (err: any) {
-            console.error(err);
             setError(err.message);
-            setStep(-1); // Vai para a tela de erro
+        } finally {
+            setIsSubmitting(false);
         }
     };
 
@@ -126,17 +161,17 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
                             {step === 1 ? (
                                 <button onClick={handleNextStep} disabled={currentAnswers.length < SELECTIONS_MINIMUM} className="px-8 py-3 bg-indigo-600 text-white font-semibold rounded-md hover:bg-indigo-700 transition-colors disabled:opacity-50">Próximo Passo</button>
                             ) : (
-                                <button onClick={handleSubmit} disabled={currentAnswers.length < SELECTIONS_MINIMUM} className="px-8 py-3 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 transition-colors disabled:opacity-50">Finalizar Teste</button>
+                                <button onClick={handleSubmit} disabled={isSubmitting || currentAnswers.length < SELECTIONS_MINIMUM} className="px-8 py-3 bg-green-600 text-white font-semibold rounded-md hover:bg-green-700 transition-colors disabled:opacity-50">{isSubmitting ? <Loader2 className="animate-spin" /> : 'Finalizar Teste'}</button>
                             )}
                         </div>
                     </>
                 );
-            case 3: // Estado de "Submetendo e Processando"
+            case 3:
                 return (
                     <div className="text-center py-20">
                         <Loader2 className="mx-auto h-12 w-12 text-indigo-600 animate-spin" />
                         <h3 className="mt-4 text-2xl font-semibold text-gray-800">Analisando suas respostas...</h3>
-                        <p className="mt-2 text-gray-600">Isso pode levar até 2 minutos. Por favor, não feche esta janela.</p>
+                        <p className="mt-2 text-gray-600">Aguarde um momento enquanto a IA gera seu perfil comportamental.</p>
                     </div>
                 );
             case 4:
@@ -175,7 +210,7 @@ const PublicTestPage: React.FC<PublicTestPageProps> = ({ testId }) => {
                         </div>
                     </div>
                 );
-            case -1: // Error
+            case -1:
             default:
                 return <div className="min-h-[50vh] flex items-center justify-center bg-red-50 p-8 rounded-lg"><AlertCircle className="text-red-500 mr-4" size={48} /><p className="text-red-700 text-xl">{error}</p></div>;
         }
