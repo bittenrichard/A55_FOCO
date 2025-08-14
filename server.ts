@@ -3,7 +3,7 @@
 import dotenv from 'dotenv';
 dotenv.config({ path: `.env.${process.env.NODE_ENV || 'development'}` });
 
-import express, { Request, Response } from 'express';
+import express, { Request, Response, NextFunction } from 'express';
 import cors from 'cors';
 import { google } from 'googleapis';
 import { baserowServer } from './src/shared/services/baserowServerClient.js';
@@ -43,7 +43,7 @@ const WHATSAPP_CANDIDATOS_TABLE_ID = '712';
 const AGENDAMENTOS_TABLE_ID = '713';
 const SALT_ROUNDS = 10;
 const TESTE_COMPORTAMENTAL_TABLE_ID = '727';
-const TESTE_COMPORTAMENTAL_WEBHOOK_URL = process.env.TESTE_COMPORTAMENTAL_WEBHOOK_URL;
+const TESTE_COMPORTAMENTAL_WEBHOOK_URL = process.env.TESTE_COMPOTAMENTAL_WEBHOOK_URL;
 
 interface BaserowJobPosting {
   id: number;
@@ -663,37 +663,53 @@ app.patch('/api/behavioral-test/submit', async (req: Request, res: Response) => 
         return res.status(400).json({ error: 'ID do teste e respostas são obrigatórios.' });
     }
 
+    if (!TESTE_COMPORTAMENTAL_WEBHOOK_URL) {
+        console.error("ERRO DE CONFIGURAÇÃO: TESTE_COMPORTAMENTAL_WEBHOOK_URL não está definido no .env");
+        return res.status(500).json({ error: 'Erro de configuração no servidor.' });
+    }
+
     try {
-        const dataToPatch = {
+        // Passo 1: Atualiza o status para "Processando" no banco de dados.
+        await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), {
             data_de_resposta: new Date().toISOString(),
             respostas: JSON.stringify(responses),
             status: 'Processando',
-        };
+        });
         
-        await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), dataToPatch);
+        console.log(`[Teste ${testId}] Disparando webhook para N8N e aguardando resposta...`);
 
-        const webhookPayload = {
-            testId: parseInt(testId),
-            responses,
-        };
+        // Passo 2: Dispara o webhook para o N8N e AGUARDA a resposta.
+        const n8nResponse = await fetch(TESTE_COMPORTAMENTAL_WEBHOOK_URL, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ testId: parseInt(testId), responses }),
+            // Adicionamos um timeout de 2 minutos (120000 ms) para a requisição
+            timeout: 120000 
+        });
 
-        if (TESTE_COMPORTAMENTAL_WEBHOOK_URL) {
-            fetch(TESTE_COMPORTAMENTAL_WEBHOOK_URL, {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify(webhookPayload),
-            }).catch(webhookError => {
-                console.error(`ERRO AO DISPARAR WEBHOOK para Teste ID: ${testId}:`, webhookError);
-            });
-        } else {
-            console.warn(`Webhook de teste comportamental não configurado. O teste ${testId} não será processado.`);
+        if (!n8nResponse.ok) {
+            throw new Error(`O N8N respondeu com um erro: ${n8nResponse.statusText}`);
         }
 
-        res.status(200).json({ success: true, message: 'Teste enviado para análise.' });
+        // Passo 3: Recebe o resultado final do N8N.
+        const finalResultFromN8N = await n8nResponse.json();
+        console.log(`[Teste ${testId}] Resposta recebida do N8N.`);
+
+        // Passo 4: Atualiza o banco de dados com os dados recebidos do N8N.
+        const dataToUpdate = {
+            ...finalResultFromN8N, // Assume que o N8N devolve os campos corretos
+            status: 'Concluído'
+        };
+        const updatedTest = await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), dataToUpdate);
+        
+        // Passo 5: Envia o resultado final e completo para o frontend.
+        res.status(200).json({ success: true, data: updatedTest });
 
     } catch (error: any) {
-        console.error(`ERRO GRAVE ao salvar respostas do Teste ID ${testId}:`, error.message);
-        res.status(500).json({ error: 'Erro ao salvar as respostas do teste.' });
+        console.error(`[Teste ${testId}] Erro no fluxo síncrono do teste:`, error.message);
+        // Atualiza o status do teste para 'Erro' no banco de dados
+        await baserowServer.patch(TESTE_COMPORTAMENTAL_TABLE_ID, parseInt(testId), { status: 'Erro' }).catch(err => console.error("Falha ao atualizar status para Erro:", err));
+        res.status(500).json({ error: error.message || 'Erro ao processar o teste.' });
     }
 });
 
@@ -727,7 +743,6 @@ app.get('/api/behavioral-test/results/recruiter/:recruiterId', async (req: Reque
   }
 });
 
-// --- ALTERAÇÃO APLICADA AQUI ---
 app.get('/api/behavioral-test/result/:testId', async (req: Request, res: Response) => {
     const { testId } = req.params;
     if (!testId) {
@@ -739,10 +754,9 @@ app.get('/api/behavioral-test/result/:testId', async (req: Request, res: Respons
             return res.status(404).json({ error: 'Resultado do teste não encontrado.' });
         }
         
-        // Adiciona cabeçalhos para desativar o cache do navegador para esta resposta
-        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate'); // HTTP 1.1.
-        res.setHeader('Pragma', 'no-cache'); // HTTP 1.0.
-        res.setHeader('Expires', '0'); // Proxies.
+        res.setHeader('Cache-Control', 'no-cache, no-store, must-revalidate');
+        res.setHeader('Pragma', 'no-cache');
+        res.setHeader('Expires', '0');
 
         res.json({ success: true, data: result });
     } catch (error: any) {
@@ -750,7 +764,6 @@ app.get('/api/behavioral-test/result/:testId', async (req: Request, res: Respons
         res.status(500).json({ error: 'Não foi possível buscar o resultado do teste.' });
     }
 });
-
 
 app.listen(port, () => {
   console.log(`Backend rodando em http://localhost:${port}`);
