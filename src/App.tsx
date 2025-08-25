@@ -10,6 +10,7 @@ import MainLayout from './shared/components/Layout/MainLayout';
 import DashboardPage from './features/dashboard/components/DashboardPage';
 import NewScreeningPage from './features/screening/components/NewScreeningPage';
 import EditScreeningPage from './features/screening/components/EditScreeningPage';
+import { ScreeningPage } from './features/screening';
 import ResultsPage from './features/results/components/ResultsPage';
 import SettingsPage from './features/settings/components/SettingsPage';
 import { LoginCredentials, SignUpCredentials } from './features/auth/types';
@@ -93,6 +94,8 @@ function App() {
       case 'behavioral-result':
           if (!activeTestId) { navigateTo('behavioral-test'); return null; }
           return <BehavioralResultPage testId={activeTestId} onBack={() => navigateTo('behavioral-test')} />;
+      case 'screening-funnel':
+        return <ScreeningPage />;
       default: return <DashboardPage jobs={jobs} candidates={candidates} onViewResults={handleViewResults} onDeleteJob={handleDeleteJob} onNavigate={navigateTo} onEditJob={handleEditJob} />;
     }
   };
